@@ -14,6 +14,7 @@ namespace nes
     struct function_trait<Return_type(Class::*)(Args...) const>
     {
         using return_type = Return_type;
+        using function_type = std::function<return_type(Args...)>;
 
         template <unsigned int N>
         using arg_type = typename std::tuple_element<N, std::tuple<Args...>>::type;
@@ -71,12 +72,14 @@ namespace nes
     template<class F, class Executor>
     class task
     {
-        using return_type = typename function_trait<F>::return_type;
-
     public:
+        using return_type = typename function_trait<F>::return_type;
+        using function_type = typename function_trait<F>::function_type;
+
+
         task(F callable, Executor& ex)
             : executor_{ ex }
-            , function_{ std::move(callable) }
+            , function_{  std::move(callable) }
         {}
 
         task(const task&) = delete;
@@ -84,21 +87,38 @@ namespace nes
         task(task&&) noexcept = default;
         task& operator=(task&&) noexcept = default;
 
+        auto fork()
+        {
+            nes::task fork_task(function_, executor_);
+            return fork_task;
+        }
 
         template<class... Args>
-        void operator()(Args&&... args) const
+        auto operator()(Args&&... args)
         {
             auto value = function_(std::forward<Args>(args)...);
-            promise_.set_value(std::move(value));
+            //promise_.set_value(std::move(value));
+            return value;
+        }
+
+        template<class T>
+        auto set_value(T v)
+        {
+            promise_.set_value(v);
+        }
+
+        void reset()
+        {
+            promise_ = std::promise<return_type>{};
         }
 
         auto get_future() { return promise_.get_future(); }
 
-        auto context() { return executor_; }
+        Executor& context() { return executor_; }
 
     private:
         Executor& executor_;
-        mutable std::promise<return_type> promise_;
+        std::promise<return_type> promise_;
         F function_;
     };
 } // nse

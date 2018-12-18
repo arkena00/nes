@@ -28,11 +28,11 @@ namespace nes
 
                     if (!processing_ && tasks_.empty()) return;
 
-                    auto task = std::move(tasks_.front());
+                    auto pool_task = std::move(tasks_.front());
                     tasks_.pop();
                     lock.unlock();
 
-                    task();
+                    pool_task();
                 }
             };
 
@@ -41,13 +41,7 @@ namespace nes
                 threads_.emplace_back(thread_loop);
             }
         }
-/*
-        auto execute(nes::task task)
-        {
-            auto& exectuor = task.context();
-            if (exectuor == *this) task();
-            else exectuor.post(task);
-        }*/
+
 
         ~thread_pool_executor()
         {
@@ -81,13 +75,13 @@ namespace nes
 
             auto shared_task = std::make_shared<decltype(task)>(std::move(task));
 
-            auto lambda = [shared_task, &args...]()
+            auto pool_task = [shared_task, &args...]()
             {
                 (*shared_task)(std::forward<Args>(args)...);
             };
 
             std::scoped_lock<std::mutex> lock(queue_mutex_);
-            tasks_.emplace(std::move(lambda));
+            tasks_.emplace(std::move(pool_task));
             condition_.notify_one();
 
             return future;
