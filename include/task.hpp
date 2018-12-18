@@ -8,7 +8,7 @@ namespace nes
 {
 
     template<class T>
-    struct function_trait : public function_trait<decltype(&T::operator())> {};
+struct function_trait : public function_trait<decltype(&std::decay_t<T>::operator())> {};
 
     template <class Class, class Return_type, class... Args>
     struct function_trait<Return_type(Class::*)(Args...) const>

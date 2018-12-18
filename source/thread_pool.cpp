@@ -14,7 +14,7 @@ int main()
 {
     auto f1 = [](int n) -> double { return 1 + n; };
     auto f2 = [](double n) -> double { return n * 10; };
-    auto f3 = [](double n) -> std::string { return "result : " + std::to_string(n); };
+    auto f3 = [](double n) -> std::string { return "str_" + std::to_string(n); };
 
     auto f4 = [](int a, int b) -> int { std::cout << "\nCALL F4"; return a + b; };
     auto f5 = []() -> double { std::cout << "\nCALL F5"; return 5 * 1000; };
@@ -57,9 +57,9 @@ int main()
 
 
     std::cout << "make pipeline";
-    nes::pipeline p{ nes::pipeline_step{f1}, nes::pipeline_step{f2} };
+    nes::pipeline p{ nes::pipeline_step{f1}, nes::pipeline_step{f2}, nes::pipeline_step{f3} };
     p.push(2);
-    //p.push(1);
+    p.push(1);
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
 

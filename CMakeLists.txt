@@ -5,6 +5,6 @@ set(CMAKE_CXX_STANDARD 17)
 
 include_directories("include")
 
-file(GLOB_RECURSE SOURCES "source/*.cpp" "include/*.hpp" "include/*.tpp")
 
-add_executable(nes ${SOURCES})
+add_executable(nes_pipeline "source/pipeline.cpp")
+add_executable(nes_thread_pool "source/thread_pool.cpp")

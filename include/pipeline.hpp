@@ -47,6 +47,27 @@ namespace nes
         F function;
     };
 
+    template<class Function>
+    struct make_step
+    {
+        using type = pipeline_step<Function>;
+
+        static auto process(const Function& f)
+        {
+            return pipeline_step<Function>{ (f) };
+        }
+    };
+    template<class Function>
+    struct make_step<pipeline_step<Function>>
+    {
+        using type = pipeline_step<Function>;
+
+        static auto process(const pipeline_step<Function>& f)
+        {
+            return std::move(f);
+        }
+    };
+
 
     template<class... Steps>
     class pipeline
@@ -58,14 +79,17 @@ namespace nes
         static constexpr auto steps_size = sizeof...(Steps);//std::tuple_size_v<Steps>;
         static constexpr auto step_last_index = steps_size - 1;
 
+        using steps_type = std::tuple<typename make_step<Steps>::type...>;
+
         template <unsigned int N>
-        using step_at = typename std::decay_t<std::tuple_element_t<N, std::tuple<Steps...>>>;
+        using step_at = typename std::decay_t<std::tuple_element_t<N, steps_type>>;
         using input_type = typename step_at<0>::input_type;
         using output_type = typename step_at<step_last_index>::return_type;
 
-        pipeline(Steps&&... steps)
+        template<class... Args>
+        pipeline(Args... steps)
             : processing_{ true }
-            , steps_{ std::forward_as_tuple(steps...) }
+            , steps_{ make_step<decltype(steps)>::process(steps)... }
         {
             nes::for_each(steps_, [this](auto&& index)
             {
@@ -79,19 +103,20 @@ namespace nes
                         auto N = decltype(index){};
 
                         std::unique_lock<std::mutex> lock(std::get<N>(step_mutex_));
-                        step_condition<N>().wait(lock, [this, index]{ auto N = decltype(index){}; return !std::get<N>(step_data_).empty() || !processing_; });
+                        step_condition<N>().wait(lock, [this, index]{ auto N = decltype(index){}; return !std::get<N>(step_input_).empty() || !processing_; });
 
                         if (!processing_) return;
 
                         // get data to process
-                        auto s = std::get<N>(step_data_).size();
-                        auto process_data = std::get<N>(step_data_).front();
-                        std::get<N>(step_data_).pop();
+                        auto process_data = std::move(std::get<N>(step_input_).front());
+                        std::get<N>(step_input_).pop();
                         lock.unlock();
 
                         auto& pipeline_task = step<N>().function;
 
-                        auto return_value = pipeline_task(0);
+                        //thread_poo_.post();
+
+                        auto return_value = pipeline_task(process_data);
                         //std::cout << "V : " << return_value;
 
                         // push result
@@ -100,17 +125,19 @@ namespace nes
                 };
 
                 std::get<N>(step_thread_) = std::thread{thread_loop};
-
             });
         }
 
 
         ~pipeline()
         {
+            processing_ = false;
+
             nes::for_each(steps_, [this](auto&& index)
             {
                 auto N = decltype(index){};
 
+                step_condition<N>().notify_one();
                 std::get<N>(step_thread_).join();
             });
         }
@@ -126,8 +153,7 @@ namespace nes
         void step_push(T value)
         {
             std::unique_lock<std::mutex> lock(std::get<N>(step_mutex_));
-            std::get<N>(step_data_).push(std::move(value));
-            auto s = std::get<N>(step_data_).size();
+            std::get<N>(step_input_).push(std::move(value));
             lock.unlock();
 
             step_condition<N>().notify_one();
@@ -136,7 +162,6 @@ namespace nes
         template<class T>
         void push(T v)
         {
-            std::cout << "push0";
             static_assert(std::is_same_v<T, input_type>, "Invalid input type");
 
             //inputs_.push(v);
@@ -161,15 +186,12 @@ namespace nes
         }
 
     private:
-        bool processing_;
-        std::tuple<Steps...> steps_;
-
-
-        std::tuple<std::queue<typename Steps::input_type>...> step_data_;
-
+        std::atomic<bool> processing_;
+        steps_type steps_;
 
         //std::priority_queue<input_type, std::vector<input_type>, std::greater<input_type>> inputs_;
 
+        std::tuple<std::queue<typename make_step<Steps>::type::input_type>...> step_input_;
         std::array<std::thread, steps_size> step_thread_;
         std::array<std::mutex, steps_size> step_mutex_;
         std::array<std::condition_variable, steps_size> step_condition_;
@@ -177,6 +199,9 @@ namespace nes
         std::mutex output_mutex_;
         std::vector<output_type> output_;
     };
+
+    template<class... Args>
+    pipeline(Args...) -> pipeline<typename make_step<Args>::type...>;
 
     /*
     template<class... Functions>
