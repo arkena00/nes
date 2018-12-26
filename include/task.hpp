@@ -97,7 +97,7 @@ struct function_trait : public function_trait<decltype(&std::decay_t<T>::operato
         auto operator()(Args&&... args)
         {
             auto value = function_(std::forward<Args>(args)...);
-            //promise_.set_value(std::move(value));
+            promise_.set_value(value);
             return value;
         }
 
